@@ -1,0 +1,52 @@
+{
+  "name": "questling",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Questling — A little companion. A bigger adventure. A proactive, personality-driven AI assistant with real-life RPG progression for Even Realities G2 glasses.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "demo": "vite --host 0.0.0.0 --port 5173 --open /?demo=1",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "vite build",
+    "build:server": "vite build --ssr server/main.ts --outDir dist-server --emptyOutDir",
+    "start": "node dist-server/main.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . && node scripts/policy-lint.mjs",
+    "test": "vitest run",
+    "test:e2e": "node tests/e2e/run-e2e.cjs",
+    "simulator": "evenhub-simulator -g http://localhost:5173",
+    "simulator:auto": "node scripts/sim-capture.mjs",
+    "assets": "python3 scripts/gen_art.py",
+    "pack": "npm run build:client && node scripts/pack.mjs"
+  },
+  "dependencies": {
+    "@evenrealities/even_hub_sdk": "0.0.16",
+    "@evenrealities/pretext": "0.1.4",
+    "@fontsource-variable/fraunces": "^5.3.0",
+    "@fontsource/atkinson-hyperlegible": "^5.3.0",
+    "@google/genai": "3.6.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@evenrealities/evenhub-cli": "0.2.0",
+    "@evenrealities/evenhub-simulator": "0.9.5",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "eslint": "^9.39.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.74.0",
+    "vite": "8.3.8",
+    "vitest": "^4.1.12"
+  }
+}

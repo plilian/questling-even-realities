@@ -1,0 +1,447 @@
+{
+ "generator": "scripts/gen_art.py",
+ "license": "Original artwork, MIT (same as repository)",
+ "attribution": "Created programmatically for Questling; no third-party sprites.",
+ "assets": [
+  {
+   "path": "companions/grumpy/idle.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/grumpy/happy.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/grumpy/annoyed.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/grumpy/thinking.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/grumpy/surprised.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/grumpy/celebrating.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/grumpy/concerned.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/grumpy/sleepy.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/commander/idle.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/commander/happy.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/commander/annoyed.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/commander/thinking.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/commander/surprised.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/commander/celebrating.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/commander/concerned.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/commander/sleepy.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/optimist/idle.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/optimist/happy.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/optimist/annoyed.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/optimist/thinking.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/optimist/surprised.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/optimist/celebrating.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/optimist/concerned.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/optimist/sleepy.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/sage/idle.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/sage/happy.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/sage/annoyed.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/sage/thinking.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/sage/surprised.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/sage/celebrating.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/sage/concerned.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/sage/sleepy.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/savage/idle.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/savage/happy.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/savage/annoyed.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/savage/thinking.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/savage/surprised.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/savage/celebrating.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/savage/concerned.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  },
+  {
+   "path": "companions/savage/sleepy.png",
+   "size": [
+    48,
+    48
+   ],
+   "glasses": [
+    144,
+    144
+   ]
+  }
+ ]
+}

@@ -1,0 +1,19 @@
+node_modules/
+dist/
+dist-server/
+*.ehpk
+.env
+.env.*
+!.env.example
+*.log
+coverage/
+test-results/
+evidence/tmp/
+credentials.yaml
+.DS_Store
+build/
+video/
+scripts/__pycache__/
+
+# local run output
+evidence/
