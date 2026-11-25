@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { ApiError, type ApiClient } from '../ai/api'
 import { CaptureSchema, InboxItemSchema, MESSAGE_PROVIDER_LABELS, type Capture, type InboxItem, type MessageProviderId } from '../shared/messages'
+import { DigestChannelSchema, type DigestChannel } from '../shared/notes'
 import type { TaskLinkState } from './tasks'
 
 export type InboxLinkState = TaskLinkState
@@ -25,11 +26,14 @@ export interface InboxService {
   reply(input: { proposalId: string; messageId: string; body: string }): Promise<{ to: string; reconciled: boolean }>
   /** GitHub: mark a notification read (verified by the server) */
   markRead?(input: { proposalId: string; messageId: string }): Promise<{ reconciled: boolean }>
+  /** Telegram: recent posts of the channels and groups your bot can read */
+  digest?(): Promise<DigestChannel[]>
   disconnect(): Promise<{ revoked: boolean }>
   onChange: (() => void) | null
 }
 
 const ListResp = z.object({ items: z.array(InboxItemSchema), label: z.string(), canReply: z.boolean(), fetchedAt: z.number(), captures: z.array(CaptureSchema).max(20).optional() })
+const DigestResp = z.object({ channels: z.array(DigestChannelSchema).max(20), fetchedAt: z.number() })
 const ReplyResp = z.object({ verified: z.literal(true), reconciled: z.boolean(), sent: z.object({ id: z.string(), to: z.string(), at: z.number() }) })
 
 /** Gmail / Slack through the Questling proxy. The session handle lives in memory only. */
@@ -129,6 +133,17 @@ export class LiveInbox implements InboxService {
     }
   }
 
+  async digest(): Promise<DigestChannel[]> {
+    if (this.provider !== 'telegram') throw new ApiError(400, 'digest_needs_telegram')
+    try {
+      const p = DigestResp.safeParse(await this.api.call<unknown>('/api/messages/digest', { headers: this.headers(), timeoutMs: 20_000 }))
+      if (!p.success) throw new ApiError(502, 'malformed_response')
+      return p.data.channels
+    } catch (e) {
+      return this.fail(e)
+    }
+  }
+
   async markRead(input: { proposalId: string; messageId: string }) {
     try {
       const p = z.object({ verified: z.literal(true), reconciled: z.boolean() }).safeParse(await this.api.call<unknown>('/api/messages/read', { body: input, headers: this.headers(), timeoutMs: 20_000 }))
@@ -159,6 +174,7 @@ export class DemoInbox implements InboxService {
   private items: InboxItem[]
   private captures: Capture[] = []
   private linked = false
+  private born: number
   sent: Array<{ messageId: string; body: string }> = []
   onChange: (() => void) | null = null
 
@@ -166,6 +182,7 @@ export class DemoInbox implements InboxService {
     readonly provider: MessageProviderId,
     now: number,
   ) {
+    this.born = now
     const min = 60_000
     // demo: one note sent to your own bot from another device (“/quest Call the bank about the card”)
     if (provider === 'telegram') this.captures = [{ id: '5550009:7', text: 'Call the bank about the new card', from: 'You (via @your_bot)', at: now - 25 * min }]
@@ -190,6 +207,27 @@ export class DemoInbox implements InboxService {
             { id: 'CDEMO:1700000000.000100', provider, from: 'Alex', title: 'Alex in #design', preview: '@you can you look at the deck before 3? Mostly the pricing slide.', where: '#design', at: now - 9 * min, important: true, canReply: true },
             { id: 'CDEMO:1700000000.000200', provider, from: 'Priya', title: 'Priya in #launch', preview: '@you the demo video link is in the doc — thumbs up if it works for you.', where: '#launch', at: now - 95 * min, important: true, canReply: true },
           ]
+  }
+  /** demo channel digest: SYNTHETIC channels and a group, labelled demo in the UI */
+  async digest(): Promise<DigestChannel[]> {
+    if (this.provider !== 'telegram') throw new ApiError(400, 'digest_needs_telegram')
+    if (!this.linked) throw new ApiError(401, 'tasks_not_connected')
+    const now = this.born
+    const min = 60_000
+    return [
+      { id: '-1005550100', title: 'Even Realities News (demo)', kind: 'channel', posts: [
+        { text: 'Even Hub SDK update: faster text upgrades and a new list style.', at: now - 50 * min },
+        { text: 'Hackathon submissions close Sunday 23:59 Dubai time.', at: now - 3 * 60 * min },
+      ] },
+      { id: '-1005550200', title: 'Launch crew (demo)', kind: 'group', posts: [
+        { text: 'Jonas: venue quote is in, they hold the date until 6.', at: now - 40 * min },
+        { text: 'Priya: demo video link is in the doc.', at: now - 95 * min },
+        { text: 'Mira: can we move the 1:1 to 1pm?', at: now - 120 * min },
+      ] },
+      { id: '-1005550300', title: 'Builders Weekly (demo)', kind: 'channel', posts: [
+        { text: 'Three tips for glanceable UIs: one idea per screen, verbs first, no scrolling.', at: now - 5 * 60 * min },
+      ] },
+    ]
   }
   status(): InboxLinkState {
     return this.linked ? { state: 'demo' } : { state: 'disconnected' }

@@ -12,7 +12,7 @@ export const TASK_PROVIDER_LABELS: Record<TaskProviderId, string> = {
 
 export const TASK_PROVIDER_BLURBS: Record<TaskProviderId, string> = {
   todoist: 'Import active tasks as quests; tick them off in Todoist when you finish.',
-  notion: 'Use one task database you share with Questling: open rows become quests.',
+  notion: 'Use one task database you share with Questling: open rows become quests. “Ask my notes” answers questions from the pages you share.',
   google_tasks: 'Your default Google Tasks list (“My Tasks”) becomes a quest source.',
 }
 

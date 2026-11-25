@@ -77,7 +77,7 @@ export const AiActionSchema = z.discriminatedUnion('type', [
 ])
 export type AiAction = z.infer<typeof AiActionSchema>
 
-export const AI_INTENTS = ['chat', 'briefing', 'quest_create', 'goal_breakdown', 'schedule', 'calendar_query', 'quest_update', 'mute', 'memory', 'review', 'catch_up', 'meeting_prep', 'message_help', 'triage', 'unclear'] as const
+export const AI_INTENTS = ['chat', 'briefing', 'quest_create', 'goal_breakdown', 'schedule', 'calendar_query', 'quest_update', 'mute', 'memory', 'review', 'catch_up', 'meeting_prep', 'message_help', 'triage', 'notes_answer', 'digest', 'unclear'] as const
 export const TRIAGE_LABELS = ['reply', 'later', 'fyi'] as const
 export type TriageLabel = (typeof TRIAGE_LABELS)[number]
 
@@ -156,6 +156,11 @@ export const AiContextSchema = z.object({
     .default([]),
   /** the message the user is replying to right now (glasses “Reply by voice”, phone reply sheet) */
   replyingTo: mref.nullable().default(null),
+  /** “Ask my notes” (N-refs: excerpts of the user's Notion pages) or the channel digest (C-refs: Telegram posts) — untrusted DATA, minimized, only for that request */
+  documents: z
+    .array(z.object({ ref: z.string().regex(/^[NC][1-9]$/), kind: z.enum(['note', 'channel']), title: z.string().max(120), text: z.string().max(1500) }))
+    .max(6)
+    .default([]),
 })
 export type AiContext = z.infer<typeof AiContextSchema>
 

@@ -4,6 +4,8 @@ import { api } from '../../src/ai/api'
 import { containsProfanity } from '../../src/companion/policy'
 import { FakeDevice } from '../fakes/device'
 import { MemoryKV } from '../../src/storage/kv'
+import { validatePage } from '../../src/glasses/page'
+import type { GlassesScreen } from '../../src/glasses/screens'
 
 type Handler = (url: string, init?: RequestInit) => Promise<Response> | Response
 let handler: Handler
@@ -638,6 +640,120 @@ describe('— the assistant layer (training, catch-up, focus, prep, running late
     expect(app.getSnapshot().brief).toMatchObject({ origin: 'ai' })
     expect(app.getSnapshot().brief!.line.text).toMatch(/Mira and Sam need you/)
     expect(bodies.some((m) => /Triage/.test(m))).toBe(true)
+    app.dispose()
+  })
+})
+
+describe('— Ask my notes (Notion) and the Telegram channel digest', () => {
+  let device: FakeDevice
+  async function demo(h: Handler = offline) {
+    handler = h
+    const app = new App()
+    device = new FakeDevice()
+    await app.boot(device, { forceDemo: true, resetDemo: true })
+    await app.refreshServer()
+    await new Promise((r) => setTimeout(r, 30))
+    return app
+  }
+  async function glasses(app: App, screen: GlassesScreen) {
+    await app.handleIntent({ type: 'nav', screen })
+    return device.last
+  }
+
+  it('Ask my notes needs Notion; then answers locally from the best page, on the glasses and the phone', async () => {
+    const app = await demo()
+    expect(app.getSnapshot().notes.ready).toBe(false)
+    await app.askNotes('pricing')
+    expect(app.getSnapshot().brief).toBeNull()
+    expect(app.getSnapshot().toasts.some((t) => /Connect Notion/.test(t.text))).toBe(true)
+    await app.connectTasks('notion')
+    const s0 = app.getSnapshot()
+    expect(s0.notes.ready).toBe(true)
+    expect(s0.notes.questions[0]).toBe('Notes about Design review with Alex')
+    // glasses: home offers it, the notes screen lists tap-only questions
+    expect((await glasses(app, { name: 'home' })).lists[0]!.items).toContain('Ask my notes')
+    const notes = await glasses(app, { name: 'notes' })
+    expect(notes.screen).toBe('notes')
+    expect(validatePage(notes)).toEqual([])
+    expect(notes.lists[0]!.items.slice(0, 3)).toEqual(s0.notes.questions.map((q) => (Buffer.byteLength(q) > 60 ? expect.any(String) : q)))
+    // tapping the first suggestion asks it
+    device.input({ kind: 'select', index: 0 })
+    await new Promise((r) => setTimeout(r, 30))
+    expect(app.getSnapshot().brief).toMatchObject({ kind: 'notes', title: 'Notes · Design review with Alex' })
+    expect(app.getSnapshot().brief!.line.text).not.toMatch(/Also in/) // “(demo)” in the title doesn't drag in every demo page
+    expect(app.getSnapshot().brief!.line.text).toMatch(/Design review prep \(demo\)/)
+    await app.handleIntent({ type: 'ask_notes', question: 'What did we decide about pricing?' })
+    const b = app.getSnapshot().brief!
+    expect(b).toMatchObject({ kind: 'notes', origin: 'local' })
+    expect(b.line.text).toMatch(/From “Pricing decisions \(demo\)”/)
+    expect(b.line.text).toMatch(/\$5 per month/)
+    expect(device.last.screen).toBe('brief')
+    expect(validatePage(device.last)).toEqual([])
+    // nothing relevant → says so, never invents
+    await app.askNotes('quarterly tax forms')
+    expect(app.getSnapshot().brief!.line.text).toBe('Nothing in your Notion notes matches “quarterly tax forms”.')
+    // meeting prep offers the notes for that meeting
+    const ev = app.getSnapshot().calendar.events.find((e) => /Design review/.test(e.title))!
+    await app.meetingPrep(ev.id)
+    expect(app.getSnapshot().brief!.actions.map((a) => a.label)).toContain('Notes for this')
+    app.dispose()
+  })
+
+  it('With AI: the notes go to the AI as N-ref documents and the answer comes back from them', async () => {
+    const seen: Array<{ message: string; documents: Array<{ ref: string; kind: string; title: string; text: string }> }> = []
+    const app = await demo(
+      aiOnline(async (url, init) => {
+        if (!url.endsWith('/api/ai/chat')) return json({ ok: false }, 404)
+        const b = JSON.parse(String(init?.body)) as { message: string; context: { documents: Array<{ ref: string; kind: string; title: string; text: string }> } }
+        seen.push({ message: b.message, documents: b.context.documents })
+        const base = { transcript: null, cleanDialogue: null, emotion: 'thinking', needsClarification: false, memoryCandidates: [], droppedActions: 0, actions: [] }
+        if (/^Answer from my notes/.test(b.message)) return json({ ok: true, response: { ...base, intent: 'notes_answer', dialogue: 'Plus is $5 a month or $48 a year (Pricing decisions).' } })
+        if (/^Digest my channels/.test(b.message)) return json({ ok: true, response: { ...base, intent: 'digest', dialogue: 'Even Realities News: SDK update out. Launch crew: venue quote in, decide by 6.' } })
+        return json({ ok: true, response: { ...base, intent: 'chat', dialogue: 'OK.' } })
+      }),
+    )
+    await app.connectTasks('notion')
+    await app.askNotes('What did we decide about pricing?')
+    const ask = seen.find((x) => /^Answer from my notes/.test(x.message))!
+    expect(ask.documents[0]).toMatchObject({ ref: 'N1', kind: 'note', title: 'Pricing decisions (demo)' })
+    expect(ask.documents.every((d) => d.text.length <= 1500)).toBe(true)
+    expect(app.getSnapshot().brief).toMatchObject({ kind: 'notes', origin: 'ai' })
+    expect(app.getSnapshot().brief!.line.text).toMatch(/\$5 a month/)
+    // other requests carry no documents
+    await app.catchUp()
+    expect(seen.find((x) => /Catch me up/.test(x.message))?.documents ?? []).toEqual([])
+    // channel digest: C-refs
+    await app.channelDigest()
+    const dg = seen.find((x) => /^Digest my channels/.test(x.message))!
+    expect(dg.documents.map((d) => [d.ref, d.kind, d.title])).toEqual([
+      ['C1', 'channel', 'Even Realities News (demo)'],
+      ['C2', 'channel', 'Launch crew (demo)'],
+      ['C3', 'channel', 'Builders Weekly (demo)'],
+    ])
+    expect(app.getSnapshot().brief).toMatchObject({ kind: 'digest', origin: 'ai' })
+    app.dispose()
+  })
+
+  it('Channel digest without AI: one line per channel from the latest posts; offered on home and after Catch me up', async () => {
+    const app = await demo()
+    expect(app.getSnapshot().digestReady).toBe(true) // demo Telegram starts linked
+    expect((await glasses(app, { name: 'home' })).lists[0]!.items).toContain('Channel digest')
+    await app.catchUp()
+    expect(app.getSnapshot().brief!.actions.map((a) => a.label)).toContain('Channel digest')
+    await app.handleIntent({ type: 'digest' })
+    const b = app.getSnapshot().brief!
+    expect(b).toMatchObject({ kind: 'digest', origin: 'local', title: 'Channel digest' })
+    expect(b.line.text.split('\n')).toEqual([
+      'Even Realities News (demo): 2 new · Even Hub SDK update: faster text upgrades and a new list style.',
+      'Launch crew (demo): 3 new · Jonas: venue quote is in, they hold the date until 6.',
+      'Builders Weekly (demo): 1 new · Three tips for glanceable UIs: one idea per screen, verbs first, no…',
+    ])
+    expect(device.last.screen).toBe('brief')
+    expect(validatePage(device.last)).toEqual([])
+    await app.disconnectInbox('telegram')
+    expect(app.getSnapshot().digestReady).toBe(false)
+    await app.channelDigest()
+    expect(app.getSnapshot().toasts.some((t) => /Connect Telegram/.test(t.text))).toBe(true)
     app.dispose()
   })
 })

@@ -21,6 +21,8 @@ export class FakeTelegram {
   connections = new Map<string, Record<string, unknown>>()
   sent: Array<Record<string, unknown>> = []
   calls: string[] = []
+  /** request bodies by method (latest last) */
+  bodies: Array<{ method: string; body: Record<string, unknown> }> = []
   private nextUpdate = 1
   private nextMsg = 900
 
@@ -32,6 +34,7 @@ export class FakeTelegram {
     this.connections.clear()
     this.sent = []
     this.calls = []
+    this.bodies = []
   }
 
   private push(u: Record<string, unknown>) {
@@ -49,6 +52,12 @@ export class FakeTelegram {
         ...(m.replyToBot ? { reply_to_message: { message_id: 1, from: { id: this.botId, is_bot: true, first_name: 'Bot' } } } : {}),
       },
     })
+    return id
+  }
+  /** a post in a channel where the bot is an admin (Bot API: `channel_post`, no `from`) */
+  channelPost(m: { chatId: number; title: string; text: string; ageSec?: number }) {
+    const id = this.nextMsg++
+    this.push({ channel_post: { message_id: id, date: Math.floor(Date.now() / 1000) - (m.ageSec ?? 60), chat: { id: m.chatId, type: 'channel', title: m.title }, text: m.text } })
     return id
   }
   businessConnection(id: string, userId: number, canReply = true, enabled = true) {
@@ -87,6 +96,7 @@ export class FakeTelegram {
         this.calls.push(method!)
         if (tok !== FAKE_BOT_TOKEN) return send(401, { ok: false, error_code: 401, description: 'Unauthorized' })
         const b = body ? (JSON.parse(body) as Record<string, unknown>) : {}
+        this.bodies.push({ method: method!, body: b })
         switch (method) {
           case 'getMe':
             return send(200, { ok: true, result: { id: this.botId, is_bot: true, first_name: 'Questling test', username: this.username, can_connect_to_business: true, can_join_groups: true, can_read_all_group_messages: false } })

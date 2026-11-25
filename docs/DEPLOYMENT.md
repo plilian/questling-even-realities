@@ -73,6 +73,8 @@ All three use the same `/link` page and link code as Calendar. Tokens stay in se
 
 Live test for each: *Camp → Task lists → Connect* → open the link in a browser, enter the code, approve → tasks appear → *Add* one → finish the quest → the app asks *Tick it off at the source?* → Confirm → the sheet shows **Done — verified**. Cancel must change nothing. Disconnect revokes the token.
 
+**Ask my notes (Notion):** share the pages you want Questling to answer from with the same Notion connection (page → ••• → Connections). It reads only shared pages.
+
 ## 3c. Mail & chat — Gmail and Slack (optional)
 
 Same `/link` page and link code as Calendar; tokens stay in server memory (≤ 12 h), no refresh tokens. The companion gives a heads-up when something **important** arrives (Gmail’s *Important* label, or a Slack message that @mentions you) and helps you answer. Every reply is shown word for word and sent only after you confirm; the server reads the sent message back before it reports **Done — verified**. Outgoing replies are always clean, whatever the 18+ setting.
@@ -101,6 +103,8 @@ No app registration and no server secret: every user brings their **own bot**.
 5. Live test: send yourself a message from a second account → it appears under *Today → Messages* and on the glasses *Inbox* → reply → Confirm → **Sent and verified**. Cancel must send nothing. Disconnect makes Questling forget the token; revoke it in BotFather (`/revoke`) if you want it dead.
 
 `TELEGRAM_ENABLED=false` hides Telegram. Updates are pulled with `getUpdates` only while the app asks (no webhook, no background job).
+
+**Channel digest (Telegram):** add your bot to a channel as an admin (it needs no rights) to receive its posts, or to a group. For full group chatter, turn privacy mode off in BotFather (`/setprivacy` → Disable) or make the bot a group admin.
 
 ## 3e. GitHub notifications (optional)
 

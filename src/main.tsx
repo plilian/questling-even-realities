@@ -20,7 +20,7 @@ async function start() {
   const device = await detectDevice()
   const params = new URLSearchParams(location.search)
   const demoParam = params.get('demo')
-  await app.boot(device, { forceDemo: demoParam === '1', resetDemo: demoParam === 'reset' })
+  await app.boot(device, { forceDemo: demoParam === '1', resetDemo: demoParam === 'reset', demoNotes: !!demoParam && params.get('notes') === 'demo' })
   console.log(`[questling] ready · device=${device.kind} · mode=${app.getSnapshot().mode}`)
   root.render(
     <ErrorBoundary>

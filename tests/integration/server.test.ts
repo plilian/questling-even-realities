@@ -156,7 +156,7 @@ describe('AI proxy', () => {
     mode: 'chat',
     companionId: 'grumpy',
     language: { adultEnabled: false, profanityLevel: 'none', roastIntensity: 'medium', intensity: 'balanced', revision: 0 },
-    context: { nowLocal: '2026-11-24T12:00', weekday: 'Tue', tz: 'Europe/Istanbul', level: 2, quests: [], completedToday: [], calendar: null, memory: [], recentTurns: [], messages: [], replyingTo: null },
+    context: { nowLocal: '2026-11-24T12:00', weekday: 'Tue', tz: 'Europe/Istanbul', level: 2, quests: [], completedToday: [], calendar: null, memory: [], recentTurns: [], messages: [], replyingTo: null, documents: [] },
     message: 'Plan my afternoon',
     ...over,
   })

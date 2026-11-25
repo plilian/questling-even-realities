@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
+import { excerpt, keywords, matchScore, type NoteHit } from '../src/shared/notes'
 import { GMAIL_METADATA_SCOPE, GMAIL_SEND_SCOPE, GOOGLE_TASKS_SCOPE, type ServerConfig } from './config'
 import { HttpError, randomId } from './security'
 import { parseDue, type ExternalTask, type TaskProviderId, type TaskSource } from '../src/shared/tasks'
@@ -596,6 +597,80 @@ async function notionComplete(cfg: ServerConfig, s: TaskSession, taskId: string)
   const t = fromNotion(await body(after, NotionPage), shape)
   if (!t.done) throw new HttpError(502, 'task_complete_unverified')
   return { task: t, note: null }
+}
+
+// ---- Notion notes ("Ask my notes"): pages shared with the connection, titles + short excerpts only
+
+const NotionSearchPage = z
+  .object({ object: z.string(), id: z.string(), last_edited_time: z.string().optional(), properties: z.record(z.string(), z.object({ type: z.string(), title: RichText.optional() }).passthrough()).default({}) })
+  .passthrough()
+type NotionSearchPageT = z.infer<typeof NotionSearchPage>
+const NotionBlock = z.object({ type: z.string() }).passthrough()
+const TEXT_BLOCKS = new Set(['paragraph', 'heading_1', 'heading_2', 'heading_3', 'bulleted_list_item', 'numbered_list_item', 'to_do', 'quote', 'callout', 'toggle', 'code'])
+
+function pageTitle(p: NotionSearchPageT): string {
+  for (const v of Object.values(p.properties)) if (v.type === 'title') return (v.title ?? []).map((t) => t.plain_text).join('').trim() || 'Untitled'
+  return 'Untitled'
+}
+const edited = (p: NotionSearchPageT) => Date.parse(p.last_edited_time ?? '') || 0
+
+async function notionSearchPages(cfg: ServerConfig, s: TaskSession, query: string): Promise<NotionSearchPageT[]> {
+  const r = await pfetch(s, `${cfg.notion.apiBase}/search`, {
+    method: 'POST',
+    body: JSON.stringify({ ...(query ? { query } : {}), filter: { property: 'object', value: 'page' }, sort: { direction: 'descending', timestamp: 'last_edited_time' }, page_size: 8 }),
+    extraHeaders: notionHeaders(cfg),
+  })
+  const b = await body(r, z.object({ results: z.array(z.unknown()).default([]) }))
+  const out: NotionSearchPageT[] = []
+  for (const x of b.results) {
+    const p = NotionSearchPage.safeParse(x)
+    if (p.success && p.data.object === 'page') out.push(p.data)
+  }
+  return out
+}
+
+async function notionPageLines(cfg: ServerConfig, s: TaskSession, id: string): Promise<string[]> {
+  const r = await pfetch(s, `${cfg.notion.apiBase}/blocks/${encodeURIComponent(id)}/children?page_size=80`, { extraHeaders: notionHeaders(cfg) })
+  const b = await body(r, z.object({ results: z.array(z.unknown()).default([]) }))
+  const lines: string[] = []
+  for (const x of b.results) {
+    const blk = NotionBlock.safeParse(x)
+    if (!blk.success || !TEXT_BLOCKS.has(blk.data.type)) continue
+    const inner = (blk.data as Record<string, unknown>)[blk.data.type] as { rich_text?: Array<{ plain_text?: string }>; checked?: boolean } | undefined
+    const text = (inner?.rich_text ?? []).map((t) => t.plain_text ?? '').join('').replace(/\s+/g, ' ').trim()
+    if (!text) continue
+    const type = blk.data.type
+    const prefix = type.startsWith('heading') ? '# ' : type === 'to_do' ? (inner?.checked ? '[x] ' : '[ ] ') : type.endsWith('list_item') ? '- ' : ''
+    lines.push((prefix + text).slice(0, 300))
+  }
+  return lines
+}
+
+export const NotesSearchSchema = z.object({ q: z.string().trim().min(2).max(200) })
+
+/**
+ * Finds the Notion pages (shared with this connection) that answer a question. Notion's search
+ * matches titles, so it searches the question's keywords plus the most recently edited pages,
+ * reads up to five candidates and returns at most three: title + an excerpt around the keywords.
+ */
+export async function searchNotes(cfg: ServerConfig, s: TaskSession, q: string): Promise<NoteHit[]> {
+  requireKind(s, 'tasks')
+  if (s.provider !== 'notion') throw new HttpError(400, 'notes_need_notion')
+  const kws = keywords(q)
+  const found = new Map<string, NotionSearchPageT>()
+  for (const query of [...kws.slice(0, 2), '']) {
+    for (const p of await notionSearchPages(cfg, s, query)) if (!found.has(p.id)) found.set(p.id, p)
+    if (found.size >= 12) break
+  }
+  const pages = [...found.values()].sort((a, b) => matchScore(pageTitle(b), '', kws) - matchScore(pageTitle(a), '', kws) || edited(b) - edited(a))
+  const scored: Array<{ p: NotionSearchPageT; title: string; lines: string[]; score: number }> = []
+  for (const p of pages.slice(0, 5)) {
+    const title = pageTitle(p).slice(0, 120)
+    const lines = await notionPageLines(cfg, s, p.id)
+    scored.push({ p, title, lines, score: matchScore(title, lines.join('\n'), kws) })
+  }
+  const hits = kws.length ? scored.filter((x) => x.score > 0).sort((a, b) => b.score - a.score) : scored
+  return hits.slice(0, 3).map((x) => ({ id: x.p.id.slice(0, 64), title: x.title, text: excerpt(x.lines, kws, 1200), editedAt: edited(x.p) || null }))
 }
 
 // ---------------------------------------------------------------- public operations

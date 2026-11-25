@@ -15,6 +15,10 @@
 - Five companions with 8 expressions and reaction animations, each with its own voice and way of solving the same problem.
 - 18+ Language Mode for the Savage: off by default, adult attestation, *Strong* and *Full 18+* tiers, instant clean switch-off.
 
+**Ask my notes and channel digest**
+- Ask a question and get the answer from the Notion pages you share, naming the page: typed on the phone, tap-only suggested questions or voice on the glasses, and *Notes for this* in meeting prep.
+- A digest of the Telegram channels and groups your bot can read: one line per channel.
+
 **Integrations (stateless server, tokens in memory only)**
 - Google Calendar read/write (focus blocks, reschedule) with exact confirmation and read-back verification.
 - Gmail (metadata + send), Slack (mentions + thread replies), Telegram (your own bot, Business mode, `/quest` capture), GitHub notifications (mark as read).
@@ -22,5 +26,5 @@
 - AI: Gemini by default; optional OpenAI, Claude (Anthropic), OpenRouter or Ollama. Every action is a validated proposal you confirm.
 
 **Quality**
-- 155 unit/integration tests, 31 browser end-to-end checks, a 22-step scripted run in the official simulator with 0 errors.
+- 163 unit/integration tests, 33 browser end-to-end checks, a 25-step scripted run in the official simulator with 0 errors.
 - Glasses list rows are clipped by UTF-8 bytes to the SDK's 63-byte limit (found in the simulator).

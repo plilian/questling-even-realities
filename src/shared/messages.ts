@@ -9,7 +9,7 @@ export const MESSAGE_PROVIDER_BLURBS: Record<MessageProviderId, string> = {
   gmail: 'Unread inbox at a glance — sender and subject only — and short replies you approve.',
   slack: 'Heads-ups when someone mentions you, and thread replies you approve.',
   github: 'Review requests, mentions and assignments as heads-ups. Add one as a quest, or mark it read after you confirm.',
-  telegram: 'Your own Telegram bot: messages to it and mentions in its groups — and, once you connect it under Telegram Business, your private chats. Replies you approve.',
+  telegram: 'Your own Telegram bot: messages to it and mentions in its groups — and, once you connect it under Telegram Business, your private chats. Replies you approve. Add the bot to channels (as admin) or groups for a channel digest.',
 }
 
 /**

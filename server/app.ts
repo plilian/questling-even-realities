@@ -21,9 +21,9 @@ import {
 } from './google'
 import { githubPage, linkPage, resultPage, telegramPage } from './pages'
 import { GITHUB_TOKEN_RE, inspectGithubToken } from './github'
-import { CompleteTaskSchema, completeDirectLink, completeTask, disconnectTasks, getTaskSession, handleTaskCallback, isTaskCode, linkProviderForCode, listTasks, messageProvidersConfigured, pollTaskLink, providerForState, requireKind, startTaskLink, taskAuthorizeUrl, taskProvidersConfigured } from './tasks'
+import { CompleteTaskSchema, NotesSearchSchema, searchNotes, completeDirectLink, completeTask, disconnectTasks, getTaskSession, handleTaskCallback, isTaskCode, linkProviderForCode, listTasks, messageProvidersConfigured, pollTaskLink, providerForState, requireKind, startTaskLink, taskAuthorizeUrl, taskProvidersConfigured } from './tasks'
 import { inspectBot, TELEGRAM_TOKEN_RE } from './telegram'
-import { MarkReadSchema, ReplySchema, listInbox, markMessageRead, replyToMessage } from './messages'
+import { MarkReadSchema, ReplySchema, listInbox, markMessageRead, messageDigest, replyToMessage } from './messages'
 import { MESSAGE_PROVIDER_IDS } from '../src/shared/messages'
 import { TASK_PROVIDER_IDS } from '../src/shared/tasks'
 import {
@@ -325,6 +325,16 @@ export async function handle(req: IncomingMessage, res: ServerResponse): Promise
       const source = url.searchParams.get('source')
       const r = await listTasks(cfg, s, source && /^[A-Za-z0-9-]{8,64}$/.test(source) ? source : null)
       return json(res, 200, { ok: true, provider: s.provider, ...r, fetchedAt: Date.now() })
+    }
+    if (req.method === 'POST' && path === '/api/notes/search') {
+      const s = getTaskSession(taskHandle)
+      const b = NotesSearchSchema.safeParse(await readJson(req, 1024))
+      if (!b.success) throw new HttpError(400, 'invalid_request')
+      return json(res, 200, { ok: true, notes: await searchNotes(cfg, s, b.data.q) })
+    }
+    if (req.method === 'GET' && path === '/api/messages/digest') {
+      const s = getTaskSession(taskHandle)
+      return json(res, 200, { ok: true, channels: await messageDigest(cfg, s), fetchedAt: Date.now() })
     }
     if (req.method === 'POST' && path === '/api/tasks/complete') {
       const s = getTaskSession(taskHandle)

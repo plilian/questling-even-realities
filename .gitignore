@@ -15,5 +15,15 @@ build/
 video/
 scripts/__pycache__/
 
+# archives, keys and editor/OS files never belong in the repo
+*.bundle
+*.zip
+*.pem
+*.key
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini
+
 # local run output
 evidence/

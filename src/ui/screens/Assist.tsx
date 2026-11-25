@@ -167,6 +167,7 @@ export function BriefSheet() {
             onClick={() => {
               app.closeBrief()
               if (a.intent.type === 'nav' && a.intent.screen.name === 'inbox') return document.querySelector('.msglist')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              if (a.intent.type === 'nav' && a.intent.screen.name === 'notes') return app.openNotesAsk()
               void app.handleIntent(a.intent)
             }}
           >
@@ -174,7 +175,53 @@ export function BriefSheet() {
           </button>
         ))}
       </div>
-      {b.origin === 'local' && <p className="tiny faint" style={{ marginBottom: 0 }}>Built on this device from your quests, calendar and inbox. With an AI provider, {c.name} writes it.</p>}
+      {b.origin === 'local' && (
+        <p className="tiny faint" style={{ marginBottom: 0 }}>
+          {b.kind === 'notes' ? 'The best matching lines from your Notion pages.' : b.kind === 'digest' ? 'The latest posts from the channels and groups your bot can read.' : 'Built on this device from your quests, calendar and inbox.'} With an AI provider, {c.name} writes it.
+        </p>
+      )}
+    </Sheet>
+  )
+}
+
+/** “Ask my notes”: a question about your Notion pages (typed, or one of the suggestions). */
+export function NotesSheet() {
+  const s = useApp()
+  const [q, setQ] = useState('')
+  if (!s.notesAsk) return null
+  const busy = s.assisting === 'notes'
+  const ask = (text: string) => {
+    if (text.trim().length < 2 || busy) return
+    app.closeNotesAsk()
+    void app.askNotes(text, 'phone')
+    setQ('')
+  }
+  return (
+    <Sheet label="Ask my notes" onClose={() => app.closeNotesAsk()}>
+      <div className="eyebrow">Notion{s.mode === 'demo' ? ' · demo notes' : ''}</div>
+      <h2 style={{ marginTop: 6 }}>Ask my notes</h2>
+      <p className="small muted" style={{ marginTop: 4 }}>
+        Questling searches the Notion pages you shared with it and answers from them, naming the page.
+      </p>
+      <form
+        className="notes-ask"
+        onSubmit={(e) => {
+          e.preventDefault()
+          ask(q)
+        }}
+      >
+        <input aria-label="Your question" placeholder="What did we decide about pricing?" value={q} maxLength={200} onChange={(e) => setQ(e.target.value)} />
+        <button type="submit" className="btn primary" disabled={busy || q.trim().length < 2}>
+          {busy ? 'Reading…' : 'Ask'}
+        </button>
+      </form>
+      <div className="reply-row" style={{ marginTop: 10 }}>
+        {s.notes.questions.map((x) => (
+          <button key={x} type="button" className="chipbtn" onClick={() => ask(x)}>
+            {x}
+          </button>
+        ))}
+      </div>
     </Sheet>
   )
 }

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { ApiError, type ApiClient } from '../ai/api'
 import { ExternalTaskSchema, TASK_PROVIDER_LABELS, TaskSourceSchema, type ExternalTask, type TaskProviderId, type TaskSource } from '../shared/tasks'
+import { NOTES_QUESTION_MAX, NoteHitSchema, excerpt, keywords, matchScore, type NoteHit } from '../shared/notes'
 
 export type TaskLinkState =
   | { state: 'disconnected' }
@@ -35,6 +36,8 @@ export interface TaskService {
   cancelLink(): void
   list(sourceId?: string | null): Promise<TaskListResult>
   complete(input: { proposalId: string; taskId: string }): Promise<CompleteResult>
+  /** Notion: pages shared with Questling that answer a question (title + short excerpt) */
+  searchNotes?(q: string): Promise<NoteHit[]>
   disconnect(): Promise<{ revoked: boolean }>
   onChange: (() => void) | null
 }
@@ -138,6 +141,17 @@ export class LiveTasks implements TaskService {
     }
   }
 
+  async searchNotes(q: string): Promise<NoteHit[]> {
+    if (this.provider !== 'notion') throw new ApiError(400, 'notes_need_notion')
+    try {
+      const p = z.object({ notes: z.array(NoteHitSchema).max(3) }).safeParse(await this.api.call<unknown>('/api/notes/search', { body: { q: q.slice(0, NOTES_QUESTION_MAX) }, headers: this.headers(), timeoutMs: 25_000 }))
+      if (!p.success) throw new ApiError(502, 'malformed_response')
+      return p.data.notes
+    } catch (e) {
+      return this.handleError(e)
+    }
+  }
+
   async complete(input: { proposalId: string; taskId: string }): Promise<CompleteResult> {
     try {
       const r = CompleteResp.safeParse(await this.api.call<unknown>('/api/tasks/complete', { body: input, headers: this.headers(), timeoutMs: 25_000 }))
@@ -170,12 +184,14 @@ export class DemoTasks implements TaskService {
   readonly mode = 'demo' as const
   private tasks: ExternalTask[]
   private linked = false
+  private born: number
   onChange: (() => void) | null = null
 
   constructor(
     readonly provider: TaskProviderId,
     now: number,
   ) {
+    this.born = now
     const day = 86400_000
     const seeds: Record<TaskProviderId, Array<[string, number | null]>> = {
       todoist: [
@@ -206,6 +222,20 @@ export class DemoTasks implements TaskService {
     return this.status()
   }
   cancelLink() {}
+  /** demo notes: SYNTHETIC Notion pages, ranked the same way the server ranks real ones */
+  async searchNotes(q: string): Promise<NoteHit[]> {
+    if (this.provider !== 'notion') throw new ApiError(400, 'notes_need_notion')
+    if (!this.linked) throw new ApiError(401, 'tasks_not_connected')
+    const kws = keywords(q)
+    const pages: Array<{ id: string; title: string; lines: string[]; edited: number }> = [
+      { id: 'demo-note-1', title: 'Design review prep (demo)', edited: this.born - 3 * 3600_000, lines: ['# Design review with Alex', '- Pricing slide: show two plans, not four', '- Alex asked for the onboarding numbers', '[ ] Bring the new glasses mockups'] },
+      { id: 'demo-note-2', title: 'Pricing decisions (demo)', edited: this.born - 26 * 3600_000, lines: ['Decided on Monday: Plus costs $5 per month, $48 per year.', 'The free tier keeps local quests and one integration.', 'Team plan later, after the pilot.'] },
+      { id: 'demo-note-3', title: 'Hackathon checklist (demo)', edited: this.born - 50 * 3600_000, lines: ['[x] Public repo with setup steps', '[ ] Demo video under 3 minutes', '[ ] Submit before Sunday 23:59 Dubai time'] },
+    ]
+    const scored = pages.map((p) => ({ p, score: matchScore(p.title, p.lines.join('\n'), kws) }))
+    const hits = kws.length ? scored.filter((x) => x.score > 0).sort((a, b) => b.score - a.score) : scored
+    return hits.slice(0, 3).map((x) => ({ id: x.p.id, title: x.p.title, text: excerpt(x.p.lines, kws, 1200), editedAt: x.p.edited }))
+  }
   async list(): Promise<TaskListResult> {
     if (!this.linked) throw new ApiError(401, 'tasks_not_connected')
     return { tasks: this.tasks.filter((t) => !t.done), sources: [], selected: null, label: `${TASK_PROVIDER_LABELS[this.provider]} · demo`, fetchedAt: Date.now() }

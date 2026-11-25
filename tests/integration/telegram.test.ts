@@ -215,3 +215,45 @@ describe('Telegram capture', () => {
     expect(tg.sent).toHaveLength(0) // capturing never writes to Telegram
   })
 })
+
+describe('Telegram channel digest', () => {
+  it('collects channel posts and group chatter the bot can read; mentions still reach the inbox; private chats never appear', async () => {
+    const tok = await session()
+    const h = await link(tok)
+    tg.channelPost({ chatId: -100500, title: 'Even Realities News', text: 'G2 firmware 1.8 is out: faster text rendering.', ageSec: 3600 })
+    tg.channelPost({ chatId: -100500, title: 'Even Realities News', text: 'Hackathon submissions close Sunday.', ageSec: 600 })
+    tg.message({ chatId: -100777, type: 'supergroup', title: 'Launch crew', fromId: 5151, first: 'Bob', text: 'venue is confirmed for Friday', ageSec: 300 })
+    tg.message({ chatId: -100777, type: 'supergroup', title: 'Launch crew', fromId: 6161, first: 'Cleo', text: '@questling_test_bot can you check the guest list?', ageSec: 200 })
+    tg.message({ chatId: 4242, fromId: 4242, first: 'Alice', text: 'private note to the bot' })
+    tg.channelPost({ chatId: -100600, title: 'Old news', text: 'from last week', ageSec: 3 * 86400 })
+    const d = await call('/api/messages/digest', { token: tok, link: h })
+    expect(d.status).toBe(200)
+    const ch = d.body.channels as Array<{ id: string; title: string; kind: string; posts: Array<{ text: string }> }>
+    expect(ch.map((c) => [c.title, c.kind])).toEqual([
+      ['Launch crew', 'group'],
+      ['Even Realities News', 'channel'],
+    ])
+    expect(ch[1]!.posts.map((p) => p.text)).toEqual(['Hackathon submissions close Sunday.', 'G2 firmware 1.8 is out: faster text rendering.'])
+    expect(ch[0]!.posts.map((p) => p.text)).toEqual(['@questling_test_bot can you check the guest list?', 'venue is confirmed for Friday'])
+    expect(JSON.stringify(d.body)).not.toContain('private note to the bot')
+    expect(JSON.stringify(d.body)).not.toContain(FAKE_BOT_TOKEN)
+    expect(tg.bodies.find((c) => c.method === 'getUpdates')!.body.allowed_updates).toContain('channel_post')
+    // the digest pull did not lose inbox messages: the DM and the mention are still there
+    const inbox = (await call('/api/messages', { token: tok, link: h })).body.items as Array<{ from: string }>
+    expect(inbox.map((i) => i.from).sort()).toEqual(['Alice', 'Cleo'])
+    // reading the digest again keeps the posts (buffer), without duplicates
+    const again = (await call('/api/messages/digest', { token: tok, link: h })).body.channels as Array<{ posts: unknown[] }>
+    expect(again.map((c) => c.posts.length)).toEqual([2, 2])
+    expect(tg.sent).toHaveLength(0)
+  })
+  it('is bounded per chat and only for Telegram connections', async () => {
+    const tok = await session()
+    const h = await link(tok)
+    for (let i = 0; i < 40; i++) tg.channelPost({ chatId: -100900, title: 'Busy channel', text: `post ${i}`, ageSec: 1000 - i })
+    const ch = (await call('/api/messages/digest', { token: tok, link: h })).body.channels as Array<{ posts: Array<{ text: string }> }>
+    expect(ch[0]!.posts).toHaveLength(10)
+    expect(ch[0]!.posts[0]!.text).toBe('post 39')
+    const r = await call('/api/messages/digest', { token: tok })
+    expect(r.status).toBe(401)
+  })
+})

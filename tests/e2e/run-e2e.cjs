@@ -186,6 +186,36 @@ const check = (name, ok, detail = '') => {
   await mail.keyboard.press('Escape')
   await mail.waitForTimeout(300)
 
+  // Channel digest (demo Telegram is linked): one line per channel, labelled local
+  await mail.getByRole('button', { name: 'Channel digest', exact: true }).first().click()
+  await mail.waitForTimeout(500)
+  const digestDlg = mail.getByRole('dialog', { name: 'Channel digest' })
+  const digestOk = (await digestDlg.isVisible()) && (await digestDlg.getByText(/Even Realities News \(demo\): 2 new/).isVisible()) && (await digestDlg.getByText(/local summary/).isVisible())
+  await mail.screenshot({ path: `${shots}/12_channel_digest.png` })
+  check('DIGEST channel digest shows one line per channel, labelled local', digestOk)
+  await mail.keyboard.press('Escape')
+  await mail.waitForTimeout(300)
+
+  // Ask my notes: connect demo Notion, ask a typed question, answer names the page
+  await mail.getByRole('navigation').getByRole('button', { name: 'Camp' }).click()
+  await mail.getByRole('button', { name: 'Connect Notion' }).click()
+  await mail.waitForTimeout(300)
+  await mail.getByRole('navigation').getByRole('button', { name: 'Today' }).click()
+  await mail.waitForTimeout(300)
+  await mail.getByRole('button', { name: 'Ask my notes', exact: true }).first().click()
+  await mail.waitForTimeout(300)
+  const askDlg = mail.getByRole('dialog', { name: 'Ask my notes' })
+  const suggestions = await askDlg.locator('.chipbtn').count()
+  await askDlg.getByRole('textbox', { name: 'Your question' }).fill('What did we decide about pricing?')
+  await askDlg.getByRole('button', { name: 'Ask', exact: true }).click()
+  await mail.waitForTimeout(600)
+  const ansDlg = mail.getByRole('dialog', { name: /^Notes · What did we decide about pricing/ })
+  const notesOk = suggestions >= 2 && (await ansDlg.isVisible()) && (await ansDlg.getByText(/From “Pricing decisions \(demo\)”/).isVisible()) && (await ansDlg.getByText(/\$5 per month/).isVisible())
+  await mail.screenshot({ path: `${shots}/13_ask_my_notes.png` })
+  check('NOTES ask my notes answers from the matching Notion page (demo), naming it', notesOk, `suggestions=${suggestions}`)
+  await mail.keyboard.press('Escape')
+  await mail.waitForTimeout(300)
+
   // Focus session from the featured quest: banner with time left
   await mail.locator('.featured').getByRole('button', { name: 'Focus', exact: true }).click()
   await mail.waitForTimeout(400)

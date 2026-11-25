@@ -2,7 +2,7 @@ import { AdultSettingsSchema, type AdultSettings, type CompanionId, type Emotion
 import { addLocalDays, dayKey, formatDateTime, formatTime, localTimezone, parseLocalDateTime, startOfLocalDay, systemClock, type Clock } from '../shared/time'
 import { freeSlots, type CalendarEvent } from '../shared/calendar'
 import { newId } from '../shared/ids'
-import { AI_PROVIDER_LABELS, AiRequestSchema, type AiAction, type AiProviderId, type AiResponse } from '../shared/ai'
+import { AI_PROVIDER_LABELS, AiRequestSchema, type AiAction, type AiContext, type AiProviderId, type AiResponse } from '../shared/ai'
 import { SaveStore, type PersistStatus } from '../storage/store'
 import { AdultSettingsRepository, DEMO_SAVE_KEY, SAVE_KEY, SaveRepository, defaultSave, type LoadOutcome } from '../storage/save'
 import type { DomainEvent, GameCommand } from '../game/reducer'
@@ -30,6 +30,7 @@ import { TRAINING_STEP_IDS, trainingStep, type TrainingStepId } from '../game/tr
 import { containsForbidden, containsProfanity } from '../companion/policy'
 import type { Capture } from '../shared/messages'
 import type { TriageLabel } from '../shared/ai'
+import { NOTES_QUESTION_MAX, keywords, type DigestChannel, type NoteHit } from '../shared/notes'
 import { demoEvents, demoSave } from '../demo/fixtures'
 
 export type Mode = 'real' | 'demo'
@@ -78,6 +79,7 @@ export interface Snapshot {
   /** “Plan my day” (local, deterministic) and whether the phone sheet shows it */
   plan: DayPlan | null
   planOpen: boolean
+  notesAsk: boolean
   focus: FocusSession | null
   brief: Brief | null
   /** AI reply suggestions and summaries/translations per message (key = provider:id) */
@@ -88,6 +90,9 @@ export interface Snapshot {
   /** which assistant task is running (for spinners) */
   assisting: string | null
   aiReady: boolean
+  /** Ask my notes (Notion) and the Telegram channel digest */
+  notes: { ready: boolean; questions: string[] }
+  digestReady: boolean
   pendingMemory: Array<{ id: string; kind: MemoryEntry['kind']; text: string }>
   toasts: Toast[]
   lastNotices: Array<{ id: string; line: Line; companionId: CompanionId; at: number; kind: string }>
@@ -142,13 +147,15 @@ export interface FocusSession {
 }
 /** A short assistant answer shown full-width on the glasses and as a sheet on the phone. */
 export interface Brief {
-  kind: 'catch_up' | 'recap' | 'prep'
+  kind: 'catch_up' | 'recap' | 'prep' | 'notes' | 'digest'
   title: string
   line: Line
   origin: 'ai' | 'local'
   actions: Array<{ label: string; intent: Intent }>
   at: number
 }
+/** shortens at a word boundary with an ellipsis */
+const shortText = (t: string, n: number) => (t.length <= n ? t : `${t.slice(0, n).replace(/\s+\S*$/, '')}…`)
 export const msgKey = (p: MessageProviderId, id: string) => `${p}:${id}`
 
 interface InboxData {
@@ -220,6 +227,7 @@ export class App {
   private replyTarget: { provider: MessageProviderId; id: string } | null = null
   private plan: DayPlan | null = null
   private planOpen = false
+  private notesAsk = false
   private focus: FocusSession | null = null
   private brief: Brief | null = null
   private replySuggestions: Record<string, string[]> = {}
@@ -255,7 +263,7 @@ export class App {
   private openedCheckIn = false
 
   // ------------------------------------------------------------------ lifecycle
-  async boot(device: Device, opts: { forceDemo?: boolean; resetDemo?: boolean } = {}) {
+  async boot(device: Device, opts: { forceDemo?: boolean; resetDemo?: boolean; demoNotes?: boolean } = {}) {
     this.device = device
     this.adultRepo = new AdultSettingsRepository(device.kv)
     const storedMode = await device.kv.get(MODE_KEY)
@@ -263,6 +271,8 @@ export class App {
     if (opts.resetDemo) await new SaveRepository(device.kv, DEMO_SAVE_KEY).clear()
     this.adult = await this.adultRepo.load()
     await this.loadSave()
+    // demo only (?notes=demo, used by the simulator walkthrough): start with the synthetic Notion pages linked
+    if (this.mode === 'demo' && opts.demoNotes) await this.taskServices.notion.beginLink()
     this.unsubs.push(device.onInput((i) => this.onGlassesInput(i)))
     this.unsubs.push(device.onLifecycle((l) => this.onLifecycle(l)))
     this.unsubs.push(device.onAudio((pcm) => this.onAudio(pcm)))
@@ -389,6 +399,7 @@ export class App {
       replyTarget: this.replyTarget,
       plan: this.plan,
       planOpen: this.planOpen,
+      notesAsk: this.notesAsk,
       focus: this.focus,
       brief: this.brief,
       replySuggestions: this.replySuggestions,
@@ -397,6 +408,8 @@ export class App {
       captures: this.allCaptures(),
       assisting: this.assisting,
       aiReady: this.aiReady(),
+      notes: this.notesView(),
+      digestReady: this.digestReady(),
       pendingMemory: this.pendingMemory,
       toasts: this.toasts,
       lastNotices: this.lastNotices,
@@ -460,6 +473,8 @@ export class App {
       captures: this.allCaptures(),
       aiReady: this.aiReady(),
       assisting: this.assisting,
+      notes: this.notesView(),
+      digestReady: this.digestReady(),
       aiLabel: this.chatSource === 'ai' ? this.aiLabel() : 'local',
       demo: this.mode === 'demo',
       assetBase: './assets/',
@@ -547,6 +562,10 @@ export class App {
         return this.proposeReply(intent.provider, intent.messageId, intent.text)
       case 'catch_up':
         return this.catchUp('glasses')
+      case 'ask_notes':
+        return this.askNotes(intent.question, 'glasses')
+      case 'digest':
+        return this.channelDigest('glasses')
       case 'recap_day':
         return this.recapDay('glasses')
       case 'focus_start':
@@ -821,6 +840,16 @@ export class App {
     }
     this.emit()
   }
+  /** phone: the “Ask my notes” sheet */
+  openNotesAsk() {
+    if (!this.notesReady()) return this.toast('Connect Notion in Camp → Task lists to ask your notes.', 'info')
+    this.notesAsk = true
+    this.emit()
+  }
+  closeNotesAsk() {
+    this.notesAsk = false
+    this.emit()
+  }
   closeBrief() {
     this.brief = null
     if (this.screen.name === 'brief') this.back()
@@ -828,18 +857,107 @@ export class App {
   }
 
   /** Ask the AI for a short answer; null when AI is off or fails (the caller shows the local version). */
-  private async aiText(message: string, task: string): Promise<{ line: Line; source: 'ai' } | null> {
+  private async aiText(message: string, task: string, docs: AiContext['documents'] = []): Promise<{ line: Line; source: 'ai' } | null> {
     if (!this.aiReady()) return null
     this.assisting = task
     this.lastAssist = null
     this.emit()
     try {
-      const resp = await this.askAssistant({ mode: 'chat', message: message.slice(0, 500) })
+      const resp = await this.askAssistant({ mode: 'chat', message: message.slice(0, 500) }, { docs })
       const la = this.lastAssist as { line: Line; source: 'ai' | 'local' } | null
       return resp && la?.source === 'ai' ? { line: la.line, source: 'ai' } : null
     } finally {
       this.assisting = null
     }
+  }
+
+  // ------------------------------------------------------------------ Ask my notes (Notion) · channel digest (Telegram)
+
+  notesReady(): boolean {
+    return !!this.taskServices.notion?.connected() && !!this.taskServices.notion.searchNotes
+  }
+  /** Tap-only questions for the glasses: the next meeting, the top quests, and a general one. */
+  noteQuestions(): string[] {
+    const out: string[] = []
+    const ev = this.nextEvent()
+    const plain = (t: string) => t.replace(/\s*\(demo\)\s*$/i, '')
+    if (ev) out.push(`Notes about ${plain(ev.title)}`)
+    for (const q of prioritizedQuests(this.store.state, this.now()).slice(0, 2)) out.push(`Notes about ${plain(q.title)}`)
+    out.push('What did I decide recently?')
+    return [...new Set(out)].slice(0, 3)
+  }
+  private notesView() {
+    const ready = this.notesReady()
+    return { ready, questions: ready ? this.noteQuestions() : [] }
+  }
+
+  /** Answers a question from the user's Notion pages: AI when available (only from the excerpts), the best excerpt otherwise. */
+  async askNotes(question: string, from: 'phone' | 'glasses' = 'phone') {
+    const q = question.trim().slice(0, NOTES_QUESTION_MAX)
+    const svc = this.taskServices.notion
+    if (!svc?.connected() || !svc.searchNotes) return this.toast('Connect Notion in Camp → Task lists to ask your notes.', 'info')
+    if (q.length < 2) return this.toast('Ask a question about your notes.', 'info')
+    this.assisting = 'notes'
+    this.emit()
+    let hits: NoteHit[]
+    try {
+      hits = await svc.searchNotes(q)
+    } catch (e) {
+      this.assisting = null
+      const code = e instanceof ApiError ? e.code : 'offline'
+      return this.toast(code === 'tasks_session_expired' ? 'Notion connection expired — reconnect it in Camp.' : `Couldn’t read your notes (${code.replace(/_/g, ' ')}).`, 'warn')
+    }
+    const topic = q.replace(/^notes (about|on|for) /i, '')
+    const title = `Notes · ${topic.length > 40 ? `${topic.slice(0, 39)}…` : topic}`
+    const actions: Brief['actions'] = [{ label: 'Ask another', intent: { type: 'nav', screen: { name: 'notes' } } }]
+    if (!hits.length) {
+      this.assisting = null
+      return this.showBrief({ kind: 'notes', title, line: this.cleanLine(`Nothing in your Notion notes matches “${q}”.`, 'local'), origin: 'local', actions }, from)
+    }
+    const docs = hits.slice(0, 3).map((h, i) => ({ ref: `N${i + 1}`, kind: 'note' as const, title: h.title.slice(0, 120), text: h.text.slice(0, 1500) }))
+    const ai = await this.aiText(`Answer from my notes: ${q}`, 'notes', docs)
+    this.assisting = null
+    const kws = keywords(q)
+    const best = hits[0]!
+    const lines = best.text.split('\n').filter((l) => !kws.length || kws.some((k) => l.toLowerCase().includes(k)))
+    const local = [`From “${best.title}”:`, ...(lines.length ? lines : best.text.split('\n')).slice(0, 2).map((l) => l.replace(/^(# |- )/, '')), hits.length > 1 ? `Also in: ${hits.slice(1).map((h) => h.title).join(', ')}.` : null]
+      .filter(Boolean)
+      .join('\n')
+    this.showBrief({ kind: 'notes', title, line: ai?.line ?? this.cleanLine(local, 'local'), origin: ai ? 'ai' : 'local', actions }, from)
+  }
+
+  digestReady(): boolean {
+    return !!this.inboxServices.telegram?.connected() && !!this.inboxServices.telegram.digest
+  }
+
+  /** A short digest of the Telegram channels and groups your bot can read. */
+  async channelDigest(from: 'phone' | 'glasses' = 'phone') {
+    const svc = this.inboxServices.telegram
+    if (!svc?.connected() || !svc.digest) return this.toast('Connect Telegram in Camp → Mail & chat for a channel digest.', 'info')
+    this.assisting = 'digest'
+    this.emit()
+    let channels: DigestChannel[]
+    try {
+      channels = await svc.digest()
+    } catch (e) {
+      this.assisting = null
+      const code = e instanceof ApiError ? e.code : 'offline'
+      return this.toast(`Couldn’t read your channels (${code.replace(/_/g, ' ')}).`, 'warn')
+    }
+    const actions: Brief['actions'] = []
+    if (this.inboxConnected()) actions.push({ label: 'Open inbox', intent: { type: 'nav', screen: { name: 'inbox' } } })
+    if (!channels.length) {
+      this.assisting = null
+      return this.showBrief({ kind: 'digest', title: 'Channel digest', line: this.cleanLine('Nothing new. Add your bot to a channel (as admin) or a group to see it here.', 'local'), origin: 'local', actions }, from)
+    }
+    const docs = channels.slice(0, 6).map((c, i) => ({ ref: `C${i + 1}`, kind: 'channel' as const, title: c.title.slice(0, 120), text: c.posts.map((p) => p.text).join('\n').slice(0, 1500) }))
+    const ai = await this.aiText('Digest my channels: one short line per channel with what matters.', 'digest', docs)
+    this.assisting = null
+    const local = channels
+      .slice(0, 3)
+      .map((c) => `${c.title}: ${c.posts.length} new · ${shortText(c.posts[0]?.text.split('\n')[0] ?? '', 70)}`)
+      .join('\n')
+    this.showBrief({ kind: 'digest', title: 'Channel digest', line: ai?.line ?? this.cleanLine(local, 'local'), origin: ai ? 'ai' : 'local', actions }, from)
   }
 
   private nextEvent() {
@@ -868,6 +986,7 @@ export class App {
     const ai = await this.aiText('Catch me up: who needs me, what is next and what slipped — at most three short lines.', 'catch_up')
     const actions: Brief['actions'] = [{ label: 'Plan my day', intent: { type: 'plan_day' } }]
     if (this.inboxConnected()) actions.push({ label: 'Open inbox', intent: { type: 'nav', screen: { name: 'inbox' } } })
+    if (this.digestReady()) actions.push({ label: 'Channel digest', intent: { type: 'digest' } })
     this.showBrief({ kind: 'catch_up', title: 'Catch me up', line: ai?.line ?? this.cleanLine(this.localCatchUp(), 'local'), origin: ai ? 'ai' : 'local', actions }, from)
   }
 
@@ -919,6 +1038,7 @@ export class App {
     const ai = await this.aiText(`Prep me for ${ref ?? 'my next meeting'}: what it is, related quests or messages, and one thing to raise — three short lines.`, 'prep')
     const actions: Brief['actions'] = []
     if (person?.canReply) actions.push({ label: 'Running late', intent: { type: 'running_late', eventId: ev.id } })
+    if (this.notesReady()) actions.push({ label: 'Notes for this', intent: { type: 'ask_notes', question: `Notes about ${ev.title.replace(/\s*\(demo\)\s*$/i, '')}` } })
     actions.push({ label: 'Open calendar', intent: { type: 'nav', screen: { name: 'calendar' } } })
     this.showBrief({ kind: 'prep', title: `Prep · ${ev.title}`, line: ai?.line ?? this.cleanLine(local, 'local'), origin: ai ? 'ai' : 'local', actions }, from)
   }
@@ -1742,14 +1862,14 @@ export class App {
     return this.store.state.memory.enabled ? [] : this.chatTurns.slice(-6).map((t) => ({ role: t.role, text: t.text ?? (t.line ? persistableText(t.line).text : '') }))
   }
 
-  private async askAssistant(input: { mode: 'chat'; message: string } | { mode: 'voice'; wavBase64: string; durationMs: number; signal?: AbortSignal }, opts: { quiet?: boolean; onRefs?: (r: RefMap) => void } = {}): Promise<AiResponse | null> {
+  private async askAssistant(input: { mode: 'chat'; message: string } | { mode: 'voice'; wavBase64: string; durationMs: number; signal?: AbortSignal }, opts: { quiet?: boolean; onRefs?: (r: RefMap) => void; docs?: AiContext['documents'] } = {}): Promise<AiResponse | null> {
     const save = this.store.state
     if (opts.quiet && !(this.server.reachable && this.server.ai.configured)) return null
     const now = this.now()
     const seq = ++this.aiSeq
     const policy = this.policy
     const memGen = save.memory.generation
-    const { context, refs } = buildContext(save, now, this.tz, { connected: this.calendarConnected(), events: this.calEvents, freeSlots: this.slots(), fetchedAt: this.calFetchedAt }, this.sessionTurns(), { items: this.allInbox(), replyingTo: this.replyTarget })
+    const { context, refs } = buildContext(save, now, this.tz, { connected: this.calendarConnected(), events: this.calEvents, freeSlots: this.slots(), fetchedAt: this.calFetchedAt }, this.sessionTurns(), { items: this.allInbox(), replyingTo: this.replyTarget }, opts.docs ?? [])
     opts.onRefs?.(refs)
     if (!opts.quiet) this.sending = true
     this.emit()
@@ -1980,6 +2100,13 @@ export class App {
     if (!resp) {
       this.voice = { ...this.voice, state: 'error', message: `Could not reach ${this.aiLabel()}. Nothing was transcribed. Try text chat.` }
       return this.emit()
+    }
+    if (resp.intent === 'notes_answer' && resp.transcript && this.notesReady()) {
+      // “Ask my notes …” by voice: the transcript becomes the question
+      this.voice = { ...this.voice, state: 'idle', transcript: resp.transcript }
+      this.stack = this.stack.filter((x) => x.name !== 'voice')
+      if (this.screen.name === 'voice') this.screen = this.stack.pop() ?? { name: 'home' }
+      return this.askNotes(resp.transcript, 'glasses')
     }
     const last = this.chatTurns[this.chatTurns.length - 1]
     const text = last?.line ? finalizeLine(last.line, this.policy, this.store.state.companion.id).text : resp.dialogue

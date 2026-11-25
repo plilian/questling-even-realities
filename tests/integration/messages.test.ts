@@ -76,7 +76,8 @@ async function link(tok: string, provider: 'gmail' | 'slack', grantedGoogle = GM
   expect((await call(cb)).status).toBe(200)
   const done = await call('/api/connect/poll', { method: 'POST', body: JSON.stringify({ linkId, pollSecret }), token: tok })
   expect(done.body.status).toBe('connected')
-  expect(JSON.stringify(done.body)).not.toMatch(/xoxp-|at-/)
+  const body = JSON.stringify(done.body)
+  for (const t of [...fake.slackTokens, ...google.validTokens]) expect(body).not.toContain(t) // the real issued tokens never leave the server
   return done.body.sessionHandle as string
 }
 

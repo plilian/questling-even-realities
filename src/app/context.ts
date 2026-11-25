@@ -24,6 +24,7 @@ export function buildContext(
   calendar: { connected: boolean; events: CalendarEvent[]; freeSlots: Array<{ start: number; end: number }>; fetchedAt: number | null },
   sessionTurns: Array<{ role: 'user' | 'companion'; text: string }>,
   inbox: { items: InboxItem[]; replyingTo?: { provider: MessageProviderId; id: string } | null } = { items: [] },
+  documents: AiContext['documents'] = [],
 ): { context: AiContext; refs: RefMap } {
   const refs: RefMap = { quests: {}, events: {}, messages: {} }
   const quests = prioritizedQuests(save, now)
@@ -97,6 +98,7 @@ export function buildContext(
     recentTurns: recent,
     messages,
     replyingTo,
+    documents,
   }
   return { context, refs }
 }

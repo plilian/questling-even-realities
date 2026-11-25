@@ -5,7 +5,7 @@ import { Quests } from './screens/Quests'
 import { TalkSheet } from './screens/Companion'
 import { ReplySheet } from './screens/Messages'
 import { PlanSheet } from './screens/Plan'
-import { BriefSheet } from './screens/Assist'
+import { BriefSheet, NotesSheet } from './screens/Assist'
 import { Character } from './screens/Character'
 import { Settings } from './screens/Settings'
 import { Onboarding } from './screens/Onboarding'
@@ -134,6 +134,7 @@ export function App({ preview }: { preview: PreviewDevice | null }) {
       <ReplySheet />
       <PlanSheet />
       <BriefSheet />
+      <NotesSheet />
       <ProposalSheet />
       <Toasts />
     </div>

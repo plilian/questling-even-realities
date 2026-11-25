@@ -51,6 +51,16 @@ export function Home({ go }: { go: (t: Tab) => void }) {
                 Catch me up
               </button>
             )}
+            {s.notes.ready && (
+              <button type="button" className="chipbtn" onClick={() => app.openNotesAsk()}>
+                Ask my notes
+              </button>
+            )}
+            {s.digestReady && (
+              <button type="button" className="chipbtn" onClick={() => void app.channelDigest()}>
+                {s.assisting === 'digest' ? 'Reading channels…' : 'Channel digest'}
+              </button>
+            )}
             <button type="button" className="chipbtn" onClick={talk}>
               Talk to {COMPANIONS[save.companion.id].name}
             </button>

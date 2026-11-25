@@ -45,6 +45,8 @@ export class FakeTasks {
   notionRevoked = new Set<string>()
   notionPages = new Map<string, NotionPage>()
   notionStatusMode = false
+  /** pages shared with the integration, for “Ask my notes” (title + blocks) */
+  notionNotes = new Map<string, { id: string; title: string; edited: string; blocks: Array<{ type: string; text: string; checked?: boolean }> }>()
   // Google Tasks
   gtasks = new Map<string, GTask>()
   failClose = false
@@ -58,6 +60,19 @@ export class FakeTasks {
     this.gtasks.clear()
     this.failClose = false
     this.notionStatusMode = false
+    this.notionNotes.clear()
+    this.notionNotes.set('33333333-aaaa-bbbb-cccc-000000000001', { id: '33333333-aaaa-bbbb-cccc-000000000001', title: 'Pricing decisions', edited: '2026-11-24T09:00:00.000Z', blocks: [
+      { type: 'heading_2', text: 'Decided on Monday' },
+      { type: 'paragraph', text: 'Pricing: Plus costs $5 per month, annual plan $48.' },
+      { type: 'paragraph', text: 'Free tier keeps local quests and one integration.' },
+      { type: 'image', text: '' },
+      { type: 'to_do', text: 'Tell Alex about the pricing change', checked: false },
+    ] })
+    this.notionNotes.set('33333333-aaaa-bbbb-cccc-000000000002', { id: '33333333-aaaa-bbbb-cccc-000000000002', title: 'Weekly sync', edited: '2026-11-25T08:00:00.000Z', blocks: [
+      { type: 'bulleted_list_item', text: 'Design review moved to Thursday' },
+      { type: 'paragraph', text: 'Alex wants the pricing slide simplified.' },
+    ] })
+    this.notionNotes.set('33333333-aaaa-bbbb-cccc-000000000003', { id: '33333333-aaaa-bbbb-cccc-000000000003', title: 'Trip packing list', edited: '2026-11-20T08:00:00.000Z', blocks: [{ type: 'to_do', text: 'Passport', checked: true }] })
     this.todoist.set('t1', { id: 't1', content: 'Pay electricity bill', description: 'account 12345', checked: false, due: { date: '2026-11-25', is_recurring: false, string: 'tomorrow' } })
     this.todoist.set('t2', { id: 't2', content: 'Water plants', description: '', checked: false, due: { date: '2026-11-24', is_recurring: true, string: 'every day' } })
     this.todoist.set('t3', { id: 't3', content: 'Old done thing', description: '', checked: true, due: null })
@@ -167,7 +182,22 @@ export class FakeTasks {
         if (!this.notionTokens.has(bearer)) return send(401, { object: 'error', code: 'unauthorized' })
         if (!req.headers['notion-version']) return send(400, { object: 'error', code: 'missing_version' })
         const rest = p.slice('/notion/v1'.length)
-        if (rest === '/search' && req.method === 'POST') return send(200, { object: 'list', results: this.notionDataSources(), has_more: false })
+        if (rest === '/search' && req.method === 'POST') {
+          const b = JSON.parse(raw || '{}')
+          if (b.filter?.value === 'page') {
+            // Notion's search matches titles; results sorted by last edit when asked
+            const q = String(b.query ?? '').toLowerCase()
+            const pages = [...this.notionNotes.values()].filter((n) => !q || n.title.toLowerCase().includes(q)).sort((x, y) => y.edited.localeCompare(x.edited)).slice(0, Number(b.page_size ?? 100))
+            return send(200, { object: 'list', has_more: false, results: pages.map((n) => ({ object: 'page', id: n.id, last_edited_time: n.edited, properties: { Name: { id: 'title', type: 'title', title: [{ plain_text: n.title }] }, Tags: { type: 'multi_select', multi_select: [] } } })) })
+          }
+          return send(200, { object: 'list', results: this.notionDataSources(), has_more: false })
+        }
+        const blocks = rest.match(/^\/blocks\/([^/]+)\/children$/)
+        if (blocks && req.method === 'GET') {
+          const n = this.notionNotes.get(blocks[1]!)
+          if (!n) return send(404, { object: 'error', code: 'object_not_found' })
+          return send(200, { object: 'list', has_more: false, results: n.blocks.map((x, i) => ({ object: 'block', id: `b${i}`, type: x.type, [x.type]: x.type === 'image' ? { type: 'external', external: { url: 'https://img.test/a.png' } } : { rich_text: [{ plain_text: x.text }], ...(x.type === 'to_do' ? { checked: !!x.checked } : {}) } })) })
+        }
         const q = rest.match(/^\/data_sources\/([^/]+)\/query$/)
         if (q && req.method === 'POST') {
           if (q[1] !== '22222222-aaaa-bbbb-cccc-000000000001') return send(404, { object: 'error' })

@@ -92,7 +92,9 @@ async function link(tok: string, provider: 'todoist' | 'notion' | 'google_tasks'
   const done = await call('/api/tasks/link/poll', { method: 'POST', body: JSON.stringify({ linkId, pollSecret }), token: tok })
   expect(done.body.status).toBe('connected')
   expect(done.body.provider).toBe(provider)
-  expect(JSON.stringify(done.body)).not.toMatch(/td-|nt-|at-|never-kept/) // no provider token leaves the server
+  // no provider token leaves the server (check the real issued tokens: random handles may contain any short fragment)
+  const body = JSON.stringify(done.body)
+  for (const t of [...fake.todoistTokens, ...fake.notionTokens, ...google.validTokens, 'never-kept']) expect(body).not.toContain(t)
   return done.body.sessionHandle as string
 }
 
@@ -226,6 +228,34 @@ describe('Notion', () => {
     expect(r.status).toBe(200)
     const patch = fake.calls.find((c) => c.method === 'PATCH')!
     expect(JSON.parse(patch.body)).toEqual({ properties: { Status: { status: { name: 'Shipped' } } } })
+  })
+  it('Ask my notes: finds pages by keyword in a POST body, returns title + excerpt only, never other pages', async () => {
+    const t = await token()
+    const h = await link(t, 'notion')
+    const r = await call('/api/notes/search', { method: 'POST', body: JSON.stringify({ q: 'What did we decide about pricing?' }), token: t, tasks: h })
+    expect(r.status).toBe(200)
+    const notes = r.body.notes as Array<{ title: string; text: string; editedAt: number }>
+    expect(notes.map((n) => n.title)).toEqual(['Pricing decisions', 'Weekly sync'])
+    expect(notes[0]!.text).toContain('Plus costs $5 per month')
+    expect(notes[0]!.text).toContain('[ ] Tell Alex about the pricing change')
+    expect(notes[1]!.text).toBe('Alex wants the pricing slide simplified.')
+    expect(JSON.stringify(r.body)).not.toContain('Passport') // unrelated page never leaves the server
+    expect(notes[0]!.editedAt).toBe(Date.parse('2026-11-24T09:00:00.000Z'))
+    // the question travels in a POST body, never in a URL
+    expect(fake.calls.filter((c) => c.path.startsWith('/notion/v1/')).every((c) => !c.path.toLowerCase().includes('pricing'))).toBe(true)
+    expect(fake.calls.some((c) => c.path === '/notion/v1/search' && JSON.parse(c.body).query === 'pricing')).toBe(true)
+    expect(fake.calls.every((c) => !c.path.startsWith('/notion/v1/') || c.path.includes('oauth') || c.headers['notion-version'] === '2025-09-03')).toBe(true)
+  })
+  it('Ask my notes: nothing relevant → empty list; bad input and non-Notion connections are refused', async () => {
+    const t = await token()
+    const h = await link(t, 'notion')
+    expect(((await call('/api/notes/search', { method: 'POST', body: JSON.stringify({ q: 'quarterly tax forms' }), token: t, tasks: h })).body.notes as unknown[]).length).toBe(0)
+    expect((await call('/api/notes/search', { method: 'POST', body: JSON.stringify({ q: 'x' }), token: t, tasks: h })).status).toBe(400)
+    expect((await call('/api/notes/search', { method: 'POST', body: JSON.stringify({ q: 'a'.repeat(201) }), token: t, tasks: h })).status).toBe(400)
+    const td = await link(t, 'todoist')
+    const r = await call('/api/notes/search', { method: 'POST', body: JSON.stringify({ q: 'pricing' }), token: t, tasks: td })
+    expect(r.status).toBe(400)
+    expect(r.body.error).toBe('notes_need_notion')
   })
   it('disconnect revokes with client credentials', async () => {
     const t = await token()

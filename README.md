@@ -8,10 +8,10 @@
 <a href="#"><img alt="Even Hub SDK 0.0.16" src="https://img.shields.io/badge/Even_Hub_SDK-0.0.16-3ddc84?style=flat-square"></a>
 <a href="#"><img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat-square&logo=typescript&logoColor=white"></a>
 <a href="#"><img alt="React 19" src="https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react&logoColor=black"></a>
-<a href="docs/TESTING.md"><img alt="155 tests passing" src="https://img.shields.io/badge/tests-155_passing-e0b964?style=flat-square"></a>
+<a href="docs/TESTING.md"><img alt="163 tests passing" src="https://img.shields.io/badge/tests-163_passing-e0b964?style=flat-square"></a>
 <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square"></a>
 
-**[Watch the demo (2:10)](https://youtu.be/RUX4nEEd9Jo)** · **[Try it in 2 minutes](#try-it-in-2-minutes)** · **[How it works](#how-it-works)** · **[Hackathon](#built-for-heads-up-2026)**
+**[Watch the demo (2:10)](https://youtu.be/RUX4nEEd9Jo)** · **[Try it in 2 minutes](#try-it-in-2-minutes)** · **[How it works](#how-it-works)** · **[Business model](#business-model)** · **[Hackathon](#built-for-heads-up-2026)**
 
 </div>
 
@@ -56,6 +56,14 @@ Start a **focus session** from any quest: a countdown on your glasses, non-urgen
 
 <img src="docs/media/feature-focus.png" alt="A focus session on the phone and glasses, and Catch me up on the glasses" width="100%">
 
+### Ask your notes, skim your channels
+
+**Ask my notes** answers a question from the Notion pages you shared with Questling, such as "What did we decide about pricing?". It reads only the few pages that match and names the page it used. On the glasses you just tap a suggested question (notes about your next meeting or top quests), or ask by voice. *Prep me* offers "Notes for this" before a meeting.
+
+The **channel digest** turns the Telegram channels and groups your bot can read into one line each: what changed, what was decided, who asked for something.
+
+<img src="docs/media/feature-notes.png" alt="Ask my notes and the channel digest on the phone and the glasses" width="100%">
+
 ### Real progress for real work
 
 Finished quests give deterministic XP (20 / 40 / 70) across four skills, plus levels, items, achievements and an optional boss campaign. **Training**, under the XP bar, teaches Questling in seven real steps: each one does the thing for real and pays XP once.
@@ -75,9 +83,9 @@ Each companion has 8 expressions, a signature reaction, its own lines for every 
 | **Google Calendar** | Next events and free time | Focus blocks, moving your own events (verified by reading them back) |
 | **Gmail** | Sender, subject and date of unread mail (metadata only, never bodies) | Replies to the original sender |
 | **Slack** | Messages that @mention you | Thread replies |
-| **Telegram** | Your bot's chats, plus your private chats via Telegram Business | Replies (as you, in Business mode) and `/quest` captures |
+| **Telegram** | Your bot's chats, your private chats via Telegram Business, and posts in channels and groups the bot is in (channel digest) | Replies (as you, in Business mode) and `/quest` captures |
 | **GitHub** | Review requests, mentions, assignments | Mark as read |
-| **Todoist · Notion · Google Tasks** | Open tasks, imported as quests | Mark done at the source |
+| **Todoist · Notion · Google Tasks** | Open tasks, imported as quests, plus the Notion pages you share (Ask my notes: titles and short excerpts) | Mark done at the source |
 | **AI** | Gemini by default; optionally OpenAI, Claude, OpenRouter or Ollama | Only proposes actions. You confirm the exact change |
 
 Everything works without accounts or keys in **demo mode**, which uses clearly labelled synthetic data.
@@ -92,6 +100,19 @@ Everything works without accounts or keys in **demo mode**, which uses clearly l
 - **18+ Language Mode** (Grix only) is off by default and needs an adult self-attestation plus an explicit opt-in. It never enables itself from AI output, an import or a link, it turns off instantly, and it never leaks into messages sent for you.
 
 Details in [`SECURITY.md`](SECURITY.md).
+
+## Business model
+
+Your data stays on your device, so Questling sells the **service around the app, not the data**: the AI work (briefings, triage, drafts, notes answers, voice) and a hosted server with ready-made Google, Slack and Notion connections that nobody wants to build themselves.
+
+| Plan | Price | For |
+|---|---|---|
+| **Free** | $0 | The full app and companions. Bring your own server and AI key (open source) |
+| **Questling Plus** | $5 / month · $48 / year | Hosted server, AI allowance, voice, one-tap integrations, shared Telegram bot |
+| **Teams** | per seat | Admin controls, SSO, team digests, self-hosted option |
+| **Companions & seasons** | small one-time | Extra companions and quest packs |
+
+Payments use signed license keys that the server checks without accounts or user records. They aren't part of this hackathon build. Full plan in [`docs/BUSINESS.md`](docs/BUSINESS.md).
 
 ## Try it in 2 minutes
 
@@ -147,9 +168,9 @@ flowchart LR
 
 | Area | How it's checked |
 |---|---|
-| Glasses UI with the Even Hub SDK | **Official Even Hub simulator 0.9.5**: a 22-step scripted run with 0 errors |
-| Phone UI | **31 browser end-to-end checks** |
-| Rules, engine, storage, policies, server | **155 unit and integration tests**, including every integration's API flow |
+| Glasses UI with the Even Hub SDK | **Official Even Hub simulator 0.9.5**: a 25-step scripted run with 0 errors |
+| Phone UI | **33 browser end-to-end checks** |
+| Rules, engine, storage, policies, server | **163 unit and integration tests**, including every integration's API flow |
 | Your accounts | Connect Google, Slack, Telegram, GitHub, Todoist, Notion and your AI provider in a few minutes ([`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)) |
 
 Details in [`docs/TESTING.md`](docs/TESTING.md).
@@ -160,11 +181,11 @@ Built for the **Heads Up: Even Realities Hackathon** (Even Realities × TVM Vent
 
 | Judging criterion | Where to look |
 |---|---|
-| **Usefulness on G2 · 30%** | Glanceable home, proactive heads-ups with *Prep me* and *Running late*, *Plan my day*, *Catch me up*, focus sessions, a triaged inbox. Everything works with swipe and tap; voice is optional |
-| **Read and write · 25%** | Reads Calendar, Gmail, Slack, Telegram, GitHub and task lists. Writes calendar blocks, replies, task tick-offs and GitHub mark-read, each one an exact, confirm-first proposal that is verified after it runs |
-| **Technical execution · 20%** | Real SDK containers verified in the official simulator, 155 tests, 31 browser checks, a stateless server with no database |
+| **Usefulness on G2 · 30%** | Glanceable home, proactive heads-ups with *Prep me* and *Running late*, *Plan my day*, *Catch me up*, *Ask my notes*, a channel digest, focus sessions, a triaged inbox. Everything works with swipe and tap; voice is optional |
+| **Read and write · 25%** | Reads Calendar, Gmail, Slack, Telegram (including channels), GitHub, task lists and your Notion pages. Writes calendar blocks, replies, task tick-offs and GitHub mark-read, each one an exact, confirm-first proposal that is verified after it runs |
+| **Technical execution · 20%** | Real SDK containers verified in the official simulator, 163 tests, 33 browser checks, a stateless server with no database |
 | **UX for display and voice · 15%** | 576 × 288 layouts measured with the official font metrics; one idea per screen; tap-only and AI-written quick replies; push-to-talk that never fakes a transcript |
-| **Business potential and safety · 10%** | Local-first with no accounts, least-privilege scopes, tokens only in server memory, confirm-before-write, adult mode behind attestation |
+| **Business potential and safety · 10%** | A subscription for the hosted service and AI, plus Teams and one-time companions ([business model](#business-model)). Local-first with no accounts, least-privilege scopes, tokens only in server memory, confirm-before-write, adult mode behind attestation |
 
 **What existed before Nov 23:** a written product plan (working title “LifeQuest”). No code. Everything in this repository was built during the hackathon week.
 
@@ -188,6 +209,7 @@ Built for the **Heads Up: Even Realities Hackathon** (Even Realities × TVM Vent
 | ![GitHub review request](docs/screenshots/glasses_13_github_review_request.png) | ![Telegram capture](docs/screenshots/glasses_14_telegram_capture_to_quest.png) |
 | ![Calendar agenda](docs/screenshots/glasses_15_calendar_agenda.png) | ![Confirm calendar write](docs/screenshots/glasses_16_confirm_calendar_write.png) |
 | ![Quest detail](docs/screenshots/glasses_17_quest_detail.png) | ![Voice](docs/screenshots/glasses_21_voice_state.png) |
+| ![Ask my notes](docs/screenshots/glasses_23_ask_my_notes.png) | ![Channel digest](docs/screenshots/glasses_22_channel_digest.png) |
 
 </details>
 

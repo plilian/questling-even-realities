@@ -33,6 +33,7 @@ export type GlassesScreen =
   | { name: 'plan' }
   | { name: 'focus' }
   | { name: 'brief' }
+  | { name: 'notes' }
   | { name: 'setup' }
 
 export type Intent =
@@ -66,6 +67,8 @@ export type Intent =
   | { type: 'mark_read'; provider: MessageProviderId; messageId: string }
   | { type: 'running_late'; eventId: string }
   | { type: 'prep_meeting'; eventId: string }
+  | { type: 'ask_notes'; question: string }
+  | { type: 'digest' }
   | { type: 'noop' }
 
 export interface VoiceView {
@@ -114,6 +117,10 @@ export interface GlassesModel {
   captures: Array<{ id: string; text: string; from: string; at: number; provider: MessageProviderId }>
   aiReady: boolean
   assisting: string | null
+  /** Ask my notes (Notion connected): tap-only suggested questions */
+  notes: { ready: boolean; questions: string[] }
+  /** Telegram channel digest available */
+  digestReady: boolean
   aiLabel: string
   demo: boolean
   assetBase: string
@@ -192,6 +199,8 @@ function buildScreenRaw(m: GlassesModel): BuiltScreen {
       return focus(m)
     case 'brief':
       return brief(m)
+    case 'notes':
+      return notes(m)
     case 'setup':
       return setup(m)
   }
@@ -237,6 +246,14 @@ function home(m: GlassesModel): BuiltScreen {
   }
   names.push('Catch me up')
   items.push({ type: 'catch_up' })
+  if (m.notes.ready) {
+    names.push('Ask my notes')
+    items.push({ type: 'nav', screen: { name: 'notes' } })
+  }
+  if (m.digestReady) {
+    names.push('Channel digest')
+    items.push({ type: 'digest' })
+  }
   names.push('Talk (voice)', 'Quest journal', 'Character', 'Calendar')
   items.push({ type: 'voice_start' }, { type: 'nav', screen: { name: 'journal' } }, { type: 'nav', screen: { name: 'character' } }, { type: 'nav', screen: { name: 'calendar' } })
   return {
@@ -318,6 +335,28 @@ function brief(m: GlassesModel): BuiltScreen {
       images: [],
       texts: [{ id: 1, name: 'brief', x: 0, y: 0, w: 576, h: 196, content: fitText(`${head}\n${b.text}`, 576 - 12, 6), padding: 6 }],
       lists: [{ id: 2, name: 'briefacts', x: 0, y: 200, w: 576, h: 88, items: names, capture: true }],
+    },
+    items,
+    tap: { type: 'noop' },
+    double: { type: 'back' },
+  }
+}
+
+/** Ask my notes: pick a suggested question (from your next meeting and quests); voice works too. */
+function notes(m: GlassesModel): BuiltScreen {
+  if (!m.notes.ready) return home(m)
+  const waiting = m.assisting === 'notes'
+  const head = `ASK MY NOTES · Notion${m.demo ? ' · DEMO' : ''}`
+  const body = waiting ? 'Reading your notes…' : 'Pick a question. Or hold Talk and ask in your own words.'
+  const qs = m.notes.questions.slice(0, 3)
+  const names = [...qs.map((q) => clipBytes(q, 60)), 'Back']
+  const items: Intent[] = [...qs.map((q) => ({ type: 'ask_notes' as const, question: q })), { type: 'back' }]
+  return {
+    page: {
+      screen: 'notes',
+      images: [],
+      texts: [{ id: 1, name: 'notes', x: 0, y: 0, w: 576, h: 96, content: fitText(`${head}\n${body}`, 576 - 12, 3), padding: 6 }],
+      lists: [{ id: 2, name: 'questions', x: 0, y: 100, w: 576, h: 188, items: names, capture: true }],
     },
     items,
     tap: { type: 'noop' },

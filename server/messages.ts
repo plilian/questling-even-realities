@@ -4,7 +4,8 @@ import { HttpError } from './security'
 import { pfetch, requireKind, type TaskSession } from './tasks'
 import { REPLY_MAX, type Capture, type InboxItem } from '../src/shared/messages'
 import { containsProfanity } from '../src/companion/policy'
-import { telegramList, telegramReply } from './telegram'
+import { telegramDigest, telegramList, telegramReply } from './telegram'
+import type { DigestChannel } from '../src/shared/notes'
 import { githubList, githubMarkRead } from './github'
 
 /**
@@ -262,6 +263,13 @@ export const ReplySchema = z.object({
 
 export const MarkReadSchema = z.object({ proposalId: z.string().regex(/^prop_[A-Za-z0-9]{8,40}$/), messageId: z.string().min(1).max(64) })
 /** GitHub only: mark a notification thread read (confirm-first, verified, idempotent). */
+/** Channel digest (Telegram only): recent posts of the channels and groups your bot can read. */
+export async function messageDigest(cfg: ServerConfig, s: TaskSession): Promise<DigestChannel[]> {
+  requireKind(s, 'messages')
+  if (s.provider !== 'telegram') throw new HttpError(400, 'digest_needs_telegram')
+  return telegramDigest(cfg, s)
+}
+
 export async function markMessageRead(cfg: ServerConfig, s: TaskSession, input: z.infer<typeof MarkReadSchema>): Promise<{ reconciled: boolean }> {
   requireKind(s, 'messages')
   if (s.provider !== 'github') throw new HttpError(400, 'not_supported')

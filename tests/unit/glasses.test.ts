@@ -55,6 +55,8 @@ function model(over: Partial<GlassesModel> = {}): GlassesModel {
     triage: {},
     captures: [],
     aiReady: false,
+    notes: { ready: false, questions: [] },
+    digestReady: false,
     assisting: null,
     ...over,
   }

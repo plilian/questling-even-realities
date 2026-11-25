@@ -3,6 +3,7 @@ import type { ServerConfig } from './config'
 import { HttpError } from './security'
 import type { TaskSession } from './tasks'
 import type { Capture, InboxItem } from '../src/shared/messages'
+import type { DigestChannel } from '../src/shared/notes'
 
 /**
  * Telegram through the user's OWN bot — no Questling-wide bot, no stored accounts.
@@ -26,7 +27,11 @@ export const TELEGRAM_TOKEN_RE = /^\d{5,12}:[A-Za-z0-9_-]{30,64}$/
 const BUFFER_MAX = 50
 const KEEP_MS = 3 * 86400_000
 const BUSINESS_REPLY_WINDOW_MS = 24 * 3600_000
-const ALLOWED_UPDATES = ['message', 'business_connection', 'business_message']
+const ALLOWED_UPDATES = ['message', 'channel_post', 'business_connection', 'business_message']
+/** channel digest: channels where the bot is an admin, groups it is in — memory only, bounded */
+const FEED_CHATS = 20
+const FEED_POSTS = 30
+const FEED_KEEP_MS = 2 * 86400_000
 
 export interface TgItem {
   item: InboxItem
@@ -47,6 +52,8 @@ export interface TelegramState {
   connections: Map<string, TgConnection>
   /** “/quest …” notes sent to the bot, kept until the app acknowledges them */
   captures?: Map<string, Capture>
+  /** recent posts of channels and groups the bot can read, for the digest */
+  feed?: Map<number, { title: string; kind: 'channel' | 'group'; posts: Array<{ id: number; text: string; at: number }> }>
 }
 const CAPTURE_RE = /^\/(quest|todo|q)(@\w+)?\s+([\s\S]{1,200})$/i
 
@@ -76,7 +83,7 @@ const TgBusinessConnection = z
     can_reply: z.boolean().optional(),
   })
   .passthrough()
-const TgUpdate = z.object({ update_id: z.number(), message: TgMessage.optional(), business_message: TgMessage.optional(), business_connection: TgBusinessConnection.optional() }).passthrough()
+const TgUpdate = z.object({ update_id: z.number(), message: TgMessage.optional(), channel_post: TgMessage.optional(), business_message: TgMessage.optional(), business_connection: TgBusinessConnection.optional() }).passthrough()
 const TgEnvelope = z.object({ ok: z.boolean(), result: z.unknown().optional(), error_code: z.number().optional(), description: z.string().optional() })
 
 function clip(s: string, n: number) {
@@ -164,11 +171,29 @@ async function connectionFor(cfg: ServerConfig, s: TaskSession, st: TelegramStat
   }
 }
 
-/** Pulls new updates into the buffer and returns the current inbox (newest first) and pending captures. */
-export async function telegramList(cfg: ServerConfig, s: TaskSession, now = Date.now(), ack: string[] = []): Promise<{ items: InboxItem[]; label: string; captures: Capture[] }> {
-  const st = s.telegram
-  if (!st) throw new HttpError(400, 'wrong_connection_kind')
-  for (const id of ack) st.captures?.delete(id)
+function addToFeed(st: TelegramState, m: TgMessageT, kind: 'channel' | 'group', now: number) {
+  const text = (m.text ?? m.caption ?? '').trim()
+  const at = m.date * 1000
+  if (!text || now - at > FEED_KEEP_MS) return
+  st.feed ??= new Map()
+  let chat = st.feed.get(m.chat.id)
+  if (!chat) {
+    if (st.feed.size >= FEED_CHATS) {
+      // drop the quietest chat (oldest latest post)
+      const oldest = [...st.feed.entries()].sort((x, y) => (x[1].posts[0]?.at ?? 0) - (y[1].posts[0]?.at ?? 0))[0]
+      if (oldest) st.feed.delete(oldest[0])
+    }
+    chat = { title: clip(m.chat.title ?? m.chat.username ?? 'Channel', 80), kind, posts: [] }
+    st.feed.set(m.chat.id, chat)
+  }
+  if (chat.posts.some((p) => p.id === m.message_id)) return
+  chat.posts.unshift({ id: m.message_id, text: clip(text, 300), at })
+  chat.posts.sort((x, y) => y.at - x.at)
+  chat.posts.length = Math.min(chat.posts.length, FEED_POSTS)
+}
+
+/** Pulls new updates from Telegram into the in-memory buffers (inbox, captures, digest feed). */
+async function pull(cfg: ServerConfig, s: TaskSession, st: TelegramState, now: number) {
   const raw = await tgCall(cfg, s.accessToken, 'getUpdates', { offset: st.offset, timeout: 0, limit: 100, allowed_updates: ALLOWED_UPDATES })
   const updates = z.array(z.unknown()).catch([]).parse(raw)
   for (const u0 of updates) {
@@ -195,6 +220,11 @@ export async function telegramList(cfg: ServerConfig, s: TaskSession, now = Date
       if (it) st.items.set(it.item.id, it)
       continue
     }
+    const cp = u.data.channel_post
+    if (cp) {
+      addToFeed(st, cp, 'channel', now)
+      continue
+    }
     const m = u.data.message
     if (m && m.from?.id !== st.botId) {
       const isPrivate = m.chat.type === 'private'
@@ -205,11 +235,24 @@ export async function telegramList(cfg: ServerConfig, s: TaskSession, now = Date
         if (st.captures.size < 20) st.captures.set(`${m.chat.id}:${m.message_id}`, { id: `${m.chat.id}:${m.message_id}`, text: clip(cap[3]!, 200), from: name(m.from), at: m.date * 1000 })
         continue
       }
+      if (!isPrivate) addToFeed(st, m, 'group', now)
       if (!isPrivate && !mentionsBot(st, m)) continue
       const it = toItem(st, m, null, now)
       if (it) st.items.set(it.item.id, it)
     }
   }
+  for (const [id, chat] of st.feed ?? []) {
+    chat.posts = chat.posts.filter((p) => now - p.at <= FEED_KEEP_MS)
+    if (!chat.posts.length) st.feed!.delete(id)
+  }
+}
+
+/** Pulls new updates into the buffer and returns the current inbox (newest first) and pending captures. */
+export async function telegramList(cfg: ServerConfig, s: TaskSession, now = Date.now(), ack: string[] = []): Promise<{ items: InboxItem[]; label: string; captures: Capture[] }> {
+  const st = s.telegram
+  if (!st) throw new HttpError(400, 'wrong_connection_kind')
+  for (const id of ack) st.captures?.delete(id)
+  await pull(cfg, s, st, now)
   // bounded, expiring buffer
   for (const [k, v] of st.items) if (now - v.item.at > KEEP_MS) st.items.delete(k)
   const sorted = [...st.items.values()].sort((a, b) => b.item.at - a.item.at)
@@ -248,4 +291,14 @@ export async function telegramReply(cfg: ServerConfig, s: TaskSession, messageId
   if (!sent.success || sent.data.chat.id !== it.chatId || (sent.data.text !== undefined && sent.data.text !== body)) throw new HttpError(502, 'message_send_unverified')
   st.items.delete(messageId)
   return { id: `${it.chatId}:${sent.data.message_id}`, to: it.item.from, at: sent.data.date * 1000 }
+}
+
+/** Channel digest: the channels and groups the bot can read, latest post first (up to 10 posts each). */
+export async function telegramDigest(cfg: ServerConfig, s: TaskSession, now = Date.now()): Promise<DigestChannel[]> {
+  const st = s.telegram
+  if (!st) throw new HttpError(400, 'wrong_connection_kind')
+  await pull(cfg, s, st, now)
+  return [...(st.feed?.entries() ?? [])]
+    .sort((a, b) => (b[1].posts[0]?.at ?? 0) - (a[1].posts[0]?.at ?? 0))
+    .map(([id, c]) => ({ id: String(id), title: c.title, kind: c.kind, posts: c.posts.slice(0, 10).map((p) => ({ text: p.text, at: p.at })) }))
 }
