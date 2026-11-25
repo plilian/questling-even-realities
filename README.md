@@ -11,7 +11,7 @@
 <a href="docs/TESTING.md"><img alt="155 tests passing" src="https://img.shields.io/badge/tests-155_passing-e0b964?style=flat-square"></a>
 <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square"></a>
 
-**[Watch the demo (2:10)](docs/media/questling-demo.mp4)** · **[Try it in 2 minutes](#try-it-in-2-minutes)** · **[How it works](#how-it-works)** · **[Hackathon](#built-for-heads-up-2026)**
+**[Watch the demo (2:10)](https://youtu.be/RUX4nEEd9Jo)** · **[Try it in 2 minutes](#try-it-in-2-minutes)** · **[How it works](#how-it-works)** · **[Hackathon](#built-for-heads-up-2026)**
 
 </div>
 
